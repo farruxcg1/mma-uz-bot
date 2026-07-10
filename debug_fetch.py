@@ -48,6 +48,12 @@ async def main(url: str):
     for m in list(re.finditer(r'<img[^>]*>', text))[:4]:
         print(m.group(0))
 
+    print()
+    print("--- '.html' bilan tugaydigan havolalar (10 tasi) ---")
+    for m in list(re.finditer(r'<a\s+[^>]*href="[^"]*\.html"[^>]*>[^<]*', text))[:10]:
+        print(m.group(0))
+        print()
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
