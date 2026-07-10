@@ -10,8 +10,9 @@ AI_MODEL = "claude-haiku-4-5-20251001"
 
 async def translate_to_uzbek(title: str, summary: str) -> dict:
     """
-    Ingliz tilidagi MMA yangiligi sarlavhasi va qisqacha matnini o'zbek tiliga,
-    sport jurnalistikasiga xos jonli uslubda tarjima qiladi.
+    Ingliz tilidagi MMA yangiligini o'zbek tiliga so'zma-so'z tarjima QILMAYDI -
+    voqeani o'z so'zlari bilan, oddiy va tushunarli tilda qayta hikoya qiladi
+    (xuddi sport sharhlovchisi do'stiga gapirib berayotgandek).
 
     AI sozlanmagan yoki xato bersa - original (ingliz) matnni qaytaradi,
     bot to'xtab qolmaydi.
@@ -24,16 +25,29 @@ async def translate_to_uzbek(title: str, summary: str) -> dict:
             model=AI_MODEL,
             max_tokens=400,
             system=(
-                "Siz sport jurnalisti sifatida ingliz tilidagi MMA/UFC yangiliklarini "
-                "o'zbek tiliga tabiiy, qisqa va tushunarli tilda tarjima qilasiz.\n\n"
+                "Siz sport jurnalistisiz. Sizga ingliz tilidagi MMA/UFC yangiligi "
+                "beriladi. Vazifangiz - uni o'zbek tiliga SO'ZMA-SO'Z TARJIMA QILISH "
+                "EMAS, balki o'qib, mazmunini tushunib, xuddi do'stingizga gapirib "
+                "berayotgandek O'Z SO'ZLARINGIZ bilan qayta hikoya qilish.\n\n"
                 "Qoidalar:\n"
+                "- Inglizcha jumla tuzilishini ko'chirmang. Avval matnni to'liq "
+                "tushuning, keyin xuddi shu voqeani oddiy o'zbek tilida, so'zlashuv "
+                "uslubida qaytadan yozing - go'yo o'zingiz shu yangilikni bilib, "
+                "birovga aytib berayotgandek.\n"
+                "- Og'ir, kitobiy, sun'iy jumlalardan qoching (masalan \"barqaror "
+                "ko'rik olmoqda\", \"nazarda tutilmoqda\" kabi noaniq iboralar "
+                "ishlatmang). Kundalik, tabiiy so'zlashuv tilidan foydalaning.\n"
                 "- Bahouvchilar ismini, tashkilot nomlarini (UFC, PFL, Bellator, ONE "
                 "Championship) o'zgartirmang yoki tarjima qilmang.\n"
-                "- Haddan tashqari rasmiy emas, sport sharhlovchisiga xos jonli, qiziqarli "
-                "uslubda yozing.\n"
-                "- Summary uzun bo'lmasin - 2-3 jumla yetarli.\n\n"
+                "- Raqamlar, sanalar, faktlarni aniq saqlang - faqat ularni "
+                "tushunarli tarzda bering.\n"
+                "- Sport sharhlovchisiga xos jonli, qiziqarli, lekin oddiy uslubda "
+                "yozing.\n"
+                "- Summary uzun bo'lmasin - 2-3 qisqa, tushunarli jumla yetarli. "
+                "Har bir jumla o'qilganda darrov tushunilishi kerak, ikkinchi marta "
+                "o'qib chiqishga hojat qolmasin.\n\n"
                 'Faqat shu JSON formatida javob bering, boshqa hech qanday matn yozmang: '
-                '{"title": "tarjima qilingan sarlavha", "summary": "qisqa tarjima qilingan xulosa"}'
+                '{"title": "qisqa, tushunarli sarlavha", "summary": "oddiy tilda qayta hikoya qilingan xulosa"}'
             ),
             messages=[{
                 "role": "user",
