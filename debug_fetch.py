@@ -37,6 +37,17 @@ async def main(url: str):
         count = text.count(marker)
         print(f"'{marker}' necha marta uchradi: {count}")
 
+    print()
+    print("--- Birinchi 6 ta <a href misoli ---")
+    import re
+    for m in list(re.finditer(r'<a\s+[^>]*href="[^"]*"[^>]*>', text))[:6]:
+        print(m.group(0))
+
+    print()
+    print("--- Birinchi 4 ta <img misoli ---")
+    for m in list(re.finditer(r'<img[^>]*>', text))[:4]:
+        print(m.group(0))
+
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:
