@@ -10,6 +10,7 @@ qaraganda ko'proq parvarish talab qiladigan usul.
 import re
 import html as html_lib
 import logging
+from urllib.parse import urljoin
 
 import httpx
 
@@ -46,26 +47,29 @@ async def scrape_sportuz_ufc(url: str) -> list[dict]:
     """
     html = await _fetch_html(url)
 
+    # Havolalar domensiz, oddiy shaklda keladi: 32766-slug.html
     link_pattern = re.compile(
-        r'<a[^>]+href="(https://sportuz\.tv/ufc/(\d+)-[^"]+\.html)"[^>]*>(.*?)</a>',
+        r'<a[^>]+href="(\d+-[^"]+\.html)"[^>]*>(.*?)</a>',
         re.DOTALL,
     )
+    # Rasm manzillari ham nisbiy (masalan ../ufc/imageboksufc/220/...jpg)
     image_pattern = re.compile(
-        r'<img[^>]+src="(https://sportuz\.tv/ufc/imageboksufc/[^"]+?\.(?:jpg|jpeg|png|webp))"',
+        r'<img[^>]+src="([^"]*imageboksufc[^"]+?\.(?:jpg|jpeg|png|webp))"',
         re.IGNORECASE,
     )
 
-    images = [(m.start(), m.group(1)) for m in image_pattern.finditer(html)]
+    images = [(m.start(), urljoin(url, m.group(1))) for m in image_pattern.finditer(html)]
     links = list(link_pattern.finditer(html))
 
     articles = {}
     order = []
 
     for m in links:
-        link, article_id, title_html = m.group(1), m.group(2), m.group(3)
+        href, article_id, title_html = m.group(1), m.group(1).split("-")[0], m.group(2)
         title = _clean_text(title_html)
+        link = urljoin(url, href)
 
-        # "Batafsil..." havolasi ham xuddi shu maqolaga ishora qiladi -
+        # Rasmga o'ralgan havola yoki "Batafsil..." havolasi bo'lishi mumkin -
         # sarlavha sifatida faqat mazmunli matnli birinchisini olamiz
         if not title or title.lower().startswith("batafsil"):
             continue
