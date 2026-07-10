@@ -27,6 +27,43 @@ def strip_html(raw_html: str) -> str:
     return text.strip()
 
 
+def extract_image_url(entry) -> str | None:
+    """
+    RSS elementidan maqolaning asosiy rasmini topadi.
+    Manbalar turlicha formatda rasm beradi, shuning uchun bir nechta
+    variant ketma-ket tekshiriladi.
+    """
+    media_content = entry.get("media_content")
+    if media_content:
+        for m in media_content:
+            url = m.get("url")
+            if url:
+                return url
+
+    media_thumbnail = entry.get("media_thumbnail")
+    if media_thumbnail:
+        for m in media_thumbnail:
+            url = m.get("url")
+            if url:
+                return url
+
+    for link in entry.get("links", []) or []:
+        if str(link.get("type", "")).startswith("image"):
+            href = link.get("href")
+            if href:
+                return href
+
+    html_blob = entry.get("summary", "") or ""
+    for content_item in entry.get("content", []) or []:
+        html_blob += content_item.get("value", "")
+
+    match = re.search(r'<img[^>]+src="([^"]+)"', html_blob)
+    if match:
+        return match.group(1)
+
+    return None
+
+
 async def is_already_posted(guid: str) -> bool:
     async with async_session() as session:
         result = await session.execute(
@@ -54,7 +91,17 @@ async def is_bootstrap_needed() -> bool:
         return result.scalar_one_or_none() is None
 
 
-def format_post(source: str, title_uz: str, summary_uz: str, link: str) -> str:
+def format_post(source: str, title_uz: str, summary_uz: str, link: str, is_caption: bool = False) -> str:
+    """
+    is_caption=True bo'lsa - Telegram caption limiti (1024 belgi) hisobga
+    olinib, summary kerak bo'lsa qisqartiriladi.
+    """
+    if is_caption:
+        fixed_part_len = len(f"🥋 {title_uz}\n\n\n\n🔗 Manba: {source} | to'liq o'qish\n#MMA #UFC")
+        max_summary_len = 1024 - fixed_part_len - 20  # zaxira
+        if max_summary_len > 0 and len(summary_uz) > max_summary_len:
+            summary_uz = summary_uz[:max_summary_len].rsplit(" ", 1)[0].rstrip(".,;: ") + "..."
+
     return (
         f"🥋 <b>{title_uz}</b>\n\n"
         f"{summary_uz}\n\n"
@@ -100,16 +147,29 @@ async def fetch_and_post():
 
             summary = strip_html(entry.get("summary") or entry.get("description") or "")
             link = entry.get("link", "")
+            image_url = extract_image_url(entry)
 
             translated = await translate_to_uzbek(title, summary)
-            post_text = format_post(source_name, translated["title"], translated["summary"], link)
 
-            try:
-                await bot.send_message(CHANNEL_ID, post_text, parse_mode="HTML")
-                logger.info(f"Yuborildi [{source_name}]: {title}")
-            except Exception as e:
-                logger.error(f"Kanalga yuborishda xato: {e}")
-                continue
+            sent = False
+            if image_url:
+                caption = format_post(source_name, translated["title"], translated["summary"], link, is_caption=True)
+                try:
+                    await bot.send_photo(CHANNEL_ID, photo=image_url, caption=caption, parse_mode="HTML")
+                    sent = True
+                except Exception as e:
+                    logger.warning(f"Rasm bilan yuborishda xato ({source_name}), matn sifatida urinib ko'ramiz: {e}")
+
+            if not sent:
+                post_text = format_post(source_name, translated["title"], translated["summary"], link)
+                try:
+                    await bot.send_message(CHANNEL_ID, post_text, parse_mode="HTML", disable_web_page_preview=True)
+                    sent = True
+                except Exception as e:
+                    logger.error(f"Kanalga yuborishda xato: {e}")
+                    continue
+
+            logger.info(f"Yuborildi [{source_name}]: {title}")
 
             await mark_posted(source_name, guid, title)
             await asyncio.sleep(3)  # Telegram flood-limitga tushmaslik uchun kichik pauza
