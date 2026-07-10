@@ -18,7 +18,7 @@ FEEDS = [
         "url": "https://www.lowkickmma.com/feed",
     },
     {
-        "name": "MMA Junkie",
-        "url": "https://mmajunkie.usatoday.com/feed",
+        "name": "My MMA News",
+        "url": "https://mymmanews.com/feed",
     },
 ]
