@@ -8,6 +8,7 @@ qaraganda ko'proq parvarish talab qiladigan usul.
 """
 
 import re
+import html as html_lib
 import logging
 
 import httpx
@@ -29,47 +30,80 @@ async def _fetch_html(url: str) -> str:
         return response.text
 
 
+def _clean_text(raw: str) -> str:
+    text = re.sub(r"<[^>]+>", " ", raw)
+    text = html_lib.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 async def scrape_sportuz_ufc(url: str) -> list[dict]:
     """
     sportuz.tv/ufc/ufcnews sahifasidagi maqolalar ro'yxatini o'qiydi.
-    Sahifada RSS yo'q, shuning uchun HTML'ni to'g'ridan-to'g'ri tahlil qilamiz.
+    Aniq HTML teglariga (masalan <p>, <div class="...">) bog'lanib qolmaslik
+    uchun, faqat ISHONCHLI qismlarga (rasm src va maqola havolasi) tayanib,
+    ular orasidagi matnni pozitsiya bo'yicha ajratib olamiz. Shunday qilib,
+    sayt HTML tuzilishini biroz o'zgartirsa ham scraper ishlashda davom etadi.
     """
     html = await _fetch_html(url)
 
-    # Har bir maqola: rasm -> sarlavha havolasi -> sana -> qisqa matn (<p>)
-    pattern = re.compile(
-        r'<img[^>]+src="(?P<image>https://sportuz\.tv/ufc/imageboksufc/[^"]+)"[^>]*>'
-        r'.*?'
-        r'<a[^>]+href="(?P<link>https://sportuz\.tv/ufc/\d+-[^"]+?\.html)"[^>]*>(?P<title>[^<]+)</a>'
-        r'.*?'
-        r'(?P<date>\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2})'
-        r'.*?'
-        r'<p[^>]*>(?P<summary>.*?)</p>',
+    link_pattern = re.compile(
+        r'<a[^>]+href="(https://sportuz\.tv/ufc/(\d+)-[^"]+\.html)"[^>]*>(.*?)</a>',
         re.DOTALL,
     )
+    image_pattern = re.compile(
+        r'<img[^>]+src="(https://sportuz\.tv/ufc/imageboksufc/[^"]+?\.(?:jpg|jpeg|png|webp))"',
+        re.IGNORECASE,
+    )
 
-    results = []
-    seen_links = set()
-    for m in pattern.finditer(html):
-        link = m.group("link")
-        if link in seen_links:
+    images = [(m.start(), m.group(1)) for m in image_pattern.finditer(html)]
+    links = list(link_pattern.finditer(html))
+
+    articles = {}
+    order = []
+
+    for m in links:
+        link, article_id, title_html = m.group(1), m.group(2), m.group(3)
+        title = _clean_text(title_html)
+
+        # "Batafsil..." havolasi ham xuddi shu maqolaga ishora qiladi -
+        # sarlavha sifatida faqat mazmunli matnli birinchisini olamiz
+        if not title or title.lower().startswith("batafsil"):
             continue
-        seen_links.add(link)
-
-        title = re.sub(r"\s+", " ", m.group("title")).strip()
-        summary = re.sub(r"<[^>]+>", "", m.group("summary"))
-        summary = re.sub(r"\s+", " ", summary).strip()
-        image = m.group("image")
-
-        if not title or not link:
+        if article_id in articles:
             continue
 
-        results.append({
-            "id": link,
+        image = None
+        for img_pos, img_url in images:
+            if img_pos < m.start():
+                image = img_url
+            else:
+                break
+
+        articles[article_id] = {
             "link": link,
             "title": title,
-            "summary": summary,
             "image": image,
+            "title_end": m.end(),
+        }
+        order.append(article_id)
+
+    results = []
+    for article_id in order:
+        art = articles[article_id]
+        start = art["title_end"]
+        next_link = link_pattern.search(html, pos=start)
+        end = next_link.start() if next_link else min(start + 1000, len(html))
+
+        summary = _clean_text(html[start:end])
+        # Boshidagi sana/ko'rishlar sonini olib tashlaymiz (masalan "10.07.2026 16:57 1264")
+        summary = re.sub(r"^\d{2}\.\d{2}\.\d{4}\s+\d{2}:\d{2}\s*\d*\s*", "", summary).strip()
+
+        results.append({
+            "id": art["link"],
+            "link": art["link"],
+            "title": art["title"],
+            "summary": summary,
+            "image": art["image"],
         })
 
     if not results:
