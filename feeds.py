@@ -21,4 +21,10 @@ FEEDS = [
         "name": "My MMA News",
         "url": "https://mymmanews.com/feed",
     },
+    {
+        "name": "SportUz UFC",
+        "type": "scrape",
+        "parser": "sportuz_ufc",
+        "url": "https://sportuz.tv/ufc/ufcnews",
+    },
 ]

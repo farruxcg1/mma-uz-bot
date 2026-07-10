@@ -13,6 +13,7 @@ from config import BOT_TOKEN, CHANNEL_ID, ADMIN_IDS, POLL_INTERVAL_MINUTES
 from database import init_db, async_session, PostedArticle
 from feeds import FEEDS
 from translator import translate_to_uzbek
+from scrapers import scrape
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("mma-uz-bot")
@@ -118,21 +119,34 @@ async def fetch_and_post():
 
     for feed_info in FEEDS:
         source_name = feed_info["name"]
-        try:
-            parsed = await asyncio.to_thread(feedparser.parse, feed_info["url"])
-        except Exception as e:
-            logger.error(f"{source_name} manbasini o'qishda xato: {e}")
-            continue
+        source_type = feed_info.get("type", "rss")
 
-        if parsed.bozo and not parsed.entries:
-            logger.warning(f"{source_name}: feed o'qilmadi yoki bo'sh ({parsed.bozo_exception})")
-            continue
+        if source_type == "scrape":
+            try:
+                entries = await scrape(feed_info["parser"], feed_info["url"])
+            except Exception as e:
+                logger.error(f"{source_name} manbasini o'qishda xato: {e}")
+                continue
+        else:
+            try:
+                parsed = await asyncio.to_thread(feedparser.parse, feed_info["url"])
+            except Exception as e:
+                logger.error(f"{source_name} manbasini o'qishda xato: {e}")
+                continue
 
-        # Eskisidan yangisiga qarab yuboramiz - kanalda xronologik tartib saqlanadi
-        entries = list(reversed(parsed.entries))
+            if parsed.bozo and not parsed.entries:
+                logger.warning(f"{source_name}: feed o'qilmadi yoki bo'sh ({parsed.bozo_exception})")
+                continue
+
+            # Eskisidan yangisiga qarab yuboramiz - kanalda xronologik tartib saqlanadi
+            entries = list(reversed(parsed.entries))
 
         for entry in entries:
-            guid = entry.get("id") or entry.get("link")
+            if source_type == "scrape":
+                guid = entry.get("id") or entry.get("link")
+            else:
+                guid = entry.get("id") or entry.get("link")
+
             if not guid:
                 continue
 
@@ -145,11 +159,16 @@ async def fetch_and_post():
                 await mark_posted(source_name, guid, title)
                 continue
 
-            summary = strip_html(entry.get("summary") or entry.get("description") or "")
-            link = entry.get("link", "")
-            image_url = extract_image_url(entry)
-
-            translated = await translate_to_uzbek(title, summary)
+            if source_type == "scrape":
+                # Manba allaqachon o'zbek tilida - tarjima shart emas
+                link = entry.get("link", "")
+                image_url = entry.get("image")
+                translated = {"title": title, "summary": entry.get("summary", "")}
+            else:
+                summary = strip_html(entry.get("summary") or entry.get("description") or "")
+                link = entry.get("link", "")
+                image_url = extract_image_url(entry)
+                translated = await translate_to_uzbek(title, summary)
 
             sent = False
             if image_url:
