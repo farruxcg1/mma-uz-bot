@@ -17,4 +17,8 @@ FEEDS = [
         "name": "LowKick MMA",
         "url": "https://www.lowkickmma.com/feed",
     },
+    {
+        "name": "MMA Fighting",
+        "url": "https://www.mmafighting.com/rss/current",
+    },
 ]
